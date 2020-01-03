@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta content="text/html; charset=utf-8" http-equiv="content-type">
+	<title>ZOC Lottery 2018</title>
+	<link href="main.css" rel="stylesheet" type="text/css">
+	<script src="easeljs-NEXT.min.js"></script>
+	<script src="tweenjs-NEXT.min.js"></script>
+	<script>
+		//==================================================
+		//= Data R/W
+		//==================================================
+		function initStorage(){
+			if (localStorage.length == 0){
+				storeAry([]);
+				localStorage.setItem('winnerMode','0');
+				winnerAry = [];
+				console.log('No localStorage, default settings inited');
+			}else{
+				winnerMode = Boolean(JSON.parse(localStorage.winnerMode))
+				winnerAry = JSON.parse(localStorage.lucky);
+				console.log('winner stored: '+winnerAry+', WinnerMode is:' + winnerMode)
+			}
+		}
+
+		function startStorageClean(){
+			cleanStorageCountdown = true
+			cleanStorageTimeout = setTimeout(function(){cleanStorage(); cancelStorageClean()}, 3000)
+			console.log('Press 3 secs to clean localStorage...');
+		}
+
+		function cancelStorageClean(){
+			cleanStorageCountdown = false;
+			clearTimeout(cleanStorageTimeout)
+			console.log('Countdown sotp/finished');
+		}
+
+		function cleanStorage(){
+			storeAry([])
+			console.log('LocalStorage Cleared.');
+			alert('LocalStorage Cleared.');
+		}
+
+		function storeAry(ary){
+			var str = JSON.stringify(ary)
+			localStorage.setItem('lucky', str);
+			console.log('Storage Updated: '+ str)
+		}
+
+
+		//==================================================
+		//= Main
+		//==================================================
+		var nameAry = ["所有", "参与","抽奖","的用户","名称","放在这","个数组","里面"];
+		var nameAry_winner = [];
+		var winnerAry = [];
+		var imgPath = 'design_v0.2-assets/';
+		var ui_stage;
+		var ui_bg;
+		var ui_bg1, ui_bg2, ui_bgMask, maskScale;
+		var ui_intro;
+		var ui_txt1, ui_txt2, txt1_stagePos, txt2_stagePos;
+		var ui_switch1, ui_switch2;
+		var ui_content;
+		var ui_heroText;
+		var ui_winnerSwitch;
+		var ui_logo;
+		var fx_flash;
+		var lastRandomNameIndex = null;
+		var lastWinnerName = '';
+		var cleanStorageCountdown = false;
+		var cleanStorageTimeout = null;
+		//Tweens
+		var txt1_idle, txt2_idle;
+		var txt1_out, txt2_out;
+		var bgMsk_out, bgMsk_in;
+		var hero_idle;
+		//StageTag
+		var stageTag = 'intro'//intro, idle, rolling, rolling-result;
+		var winnerMode = false;
+
+
+		window.addEventListener('resize', resize, false);
+		//createjs.Ticker.interval = 17;
+		createjs.Ticker.timingMode = createjs.Ticker.RAF_SYNCHED;
+		createjs.Ticker.framerate = 30;
+
+		function init() {
+			//Stage
+			ui_stage = new createjs.Stage("mainCanvas");
+
+			//Background
+			ui_bg = new createjs.Container();
+			ui_stage.addChild(ui_bg);
+			ui_bg1 = new createjs.Bitmap(imgPath+'bg1.jpg');
+			ui_bg2 = new createjs.Bitmap(imgPath+'bg2.jpg');
+			ui_bgMask = new createjs.Shape();
+			ui_bgMask.graphics.beginFill('#ff00ff').drawCircle(0,0,960);
+			ui_bgMask.x = 1920/2; ui_bgMask.y = 1080/2;
+			ui_bgMask.visible = false;
+			ui_bgMask.scaleX = 0; ui_bgMask.scaleY = 0;
+			//ui_bg1.visible = true;
+			//ui_bg2.visible = false;
+			ui_bg2.mask = ui_bgMask;
+			ui_bg.addChild(ui_bg1, ui_bg2, ui_bgMask)
+			ui_bg.regX = 1920/2
+
+			//Intro Container
+			ui_intro = new createjs.Container();
+			ui_stage.addChild(ui_intro);
+
+			//Content Container
+			ui_content = new createjs.Container();
+			ui_stage.addChild(ui_content);
+
+			//Building Intro
+			ui_txt1 = new createjs.Bitmap(imgPath+'intro_txt1@2x.png');
+			ui_txt2 = new createjs.Bitmap(imgPath+'intro_txt2@2x.png');
+			ui_txt1.regX = ui_txt1.getBounds().width/2; ui_txt1.regY = ui_txt1.getBounds().height/2;
+			ui_txt2.regX = ui_txt2.getBounds().width/2; ui_txt2.regY = ui_txt2.getBounds().height/2;
+			ui_txt1.scaleX = 0; ui_txt1.scaleY = 0;
+			ui_txt2.scaleX = 0; ui_txt2.scaleY = 0;
+			ui_txt1.rotation = -15+Math.random()*15;
+			ui_txt2.rotation = -15+Math.random()*15;
+			ui_intro.addChild(ui_txt1, ui_txt2);
+
+			//ui_heroText
+			ui_heroText = new createjs.Text('你','bold 172px "微软雅黑"','#FFF')
+			ui_heroText.textAlign = 'center';
+			console.log(ui_heroText.getBounds())
+			//ui_heroText.regX = ui_heroText.getBounds().width/2; ui_heroText.regY = ui_heroText.getBounds().height/2;
+			ui_heroText.y = -100;
+			ui_heroText.scaleX = 0; ui_heroText.scaleY = 0;
+			ui_content.addChild(ui_heroText);
+
+			//Winner Switch
+			ui_winnerSwitch = new createjs.Container();
+			ui_swtich1 = new createjs.Bitmap(imgPath+'suo_on.png');
+			ui_swtich2 = new createjs.Bitmap(imgPath+'suo_off.png');
+			ui_winnerSwitch.regX = 140; ui_winnerSwitch.regY = 29;
+			ui_winnerSwitch.scaleX = 0.5; ui_winnerSwitch.scaleY = 0.5;
+			ui_swtich1.visible = false; ui_swtich2.visible = true;
+			ui_winnerSwitch.addChild(ui_swtich1, ui_swtich2);
+			ui_content.addChild(ui_winnerSwitch);
+			ui_winnerSwitch.addEventListener('click', toggleWinnerSwitch);
+
+			//Logo in the corner
+			ui_logo = new createjs.Bitmap(imgPath+'logo_corner.png');
+			ui_logo.scaleX = 0.75; ui_logo.scaleY = 0.75;
+			ui_logo.visible = false;
+			ui_content.addChild(ui_logo);
+
+			//Interaction
+			this.document.onkeydown = keyPressed;
+			this.document.onkeyup = keyUp;
+
+			//Document Settings
+			createjs.Ticker.addEventListener('tick',tick);
+			resize();
+
+			//Data
+			initStorage();
+			nameAry_winner = substractAry(nameAry, winnerAry);
+			if(winnerMode){
+				winnerMode_on();
+			}
+		}
+
+
+		//==================================================
+		//= UI Building
+		//==================================================
+		function keyPressed(event){
+			switch(event.keyCode) {
+				case 32:
+					//key: Space
+					luckyRandom();
+					break;
+				case 88:
+					//key: X
+					if(!cleanStorageCountdown){
+						startStorageClean();
+					}
+					break;
+				case 82:
+					//key: R
+					toggleWinnerSwitch(undefined)
+			}
+		}
+
+		function keyUp(event){
+			switch(event.keyCode) {
+				case 88:
+					//key: X
+					if(cleanStorageCountdown){
+						cancelStorageClean();
+					}
+					break;
+			}
+		}
+
+		//Winnder Mode Switching
+		function toggleWinnerSwitch(event){
+			if(!winnerMode){
+				//Switch ON
+				winnerMode_on();
+
+			}else{
+				//Switch OFF
+				winnerMode_off();
+			}
+		}
+
+		function winnerMode_on(){
+			winnerMode = true;
+			localStorage.setItem('winnerMode','1');
+			ui_swtich1.visible = true; ui_swtich2.visible = false;
+			bgMsk_out = createjs.Tween.get(ui_bgMask).to({
+				scaleX: maskScale,
+				scaleY: maskScale
+			}, 1000, createjs.Ease.cubicInOut)
+		}
+
+		function winnerMode_off(){
+			winnerMode = false;
+			localStorage.setItem('winnerMode','0');
+			ui_swtich1.visible = false; ui_swtich2.visible = true;
+			bgMsk_in = createjs.Tween.get(ui_bgMask).to({
+				scaleX: 0,
+				scaleY: 0
+			}, 1000, createjs.Ease.cubicInOut)
+		}
+
+		//TWEEN STYLE
+		function idleIntro(event){
+			txt1_idle = createjs.Tween.get(ui_txt1).to(
+			{
+				y: txt1_stagePos.y*1.1,
+				scaleX: txt1_stagePos.scaleX*1.05,
+				scaleY: txt1_stagePos.scaleX*1.02
+			}, 5000, createjs.Ease.cubicInOut);
+			txt1_idle.bounce = true;
+			txt1_idle.loop = -1;
+
+			txt2_idle = createjs.Tween.get(ui_txt2).to(
+			{
+				y: txt2_stagePos.y*1.1,
+			}, 6000, createjs.Ease.cubicInOut);
+			txt2_idle.bounce = true;
+			txt2_idle.loop = -1;
+		}
+
+		function idleHeroText(){
+			ui_heroText.alpha = 0;
+			ui_heroText.scaleX = 3;
+			ui_heroText.scaleY = 2;
+			ui_heroText.rotation = -10 + Math.random() * 20;
+
+			heroEndPop = createjs.Tween.get(ui_heroText).to({
+				alpha: 1,
+				scaleX: 1,
+				scaleY: 1,
+				rotation: 0
+			},750,createjs.Ease.elasticOut)
+
+			heroEndPop.addEventListener('complete', function(e){
+				hero_idle = createjs.Tween.get(ui_heroText).to(
+				{
+					y: -105,
+					scaleX:1.2,
+					scaleY:1.2
+				}, 3000, createjs.Ease.backInOut);
+				hero_idle.bounce = true;
+				hero_idle.loop = -1;
+			})
+		}
+
+
+		//==================================================
+		//= Lucky Random
+		//==================================================
+		var rollingSpd = 100;
+		var rollingInterval = 100;
+		function luckyRandom(winMode){
+			winMode = winMode || winnerMode;
+			//Key Space pressed
+			if(stageTag != 'rolling'){
+				//Start LuckyRandom
+				createjs.Tween.removeTweens(ui_txt1);
+				createjs.Tween.removeTweens(ui_txt2);
+				txt1_out = createjs.Tween.get(ui_txt1).to({
+					y: ui_stage.canvas.height*-1
+				}, 1000, createjs.Ease.cubicIn);
+				txt2_out = createjs.Tween.get(ui_txt2).to({
+					y: ui_stage.canvas.height
+				}, 1000, createjs.Ease.cubicIn);
+				rollingInterval = setInterval(function(){ rollNames(winMode) }, rollingSpd)
+				stageTag = 'rolling';
+				ui_winnerSwitch.visible = false;
+				ui_logo.visible = true;
+			}else{
+				//Stop LuckRandom
+				clearInterval(rollingInterval);
+				ui_heroText.text = getWinner(winMode);
+				createjs.Tween.removeTweens(ui_heroText);
+				idleHeroText()
+				ui_winnerSwitch.visible = true;
+				stageTag = 'rolling-result';
+			}
+		}
+
+		function rollNames(winMode){
+			createjs.Tween.removeTweens(ui_heroText);
+			if(winMode){
+				ui_heroText.text = randomName(nameAry_winner);
+			}else{
+				ui_heroText.text = randomName(nameAry);
+			}
+			//Animation start
+			ui_heroText.y = -100;
+			ui_heroText.alpha = 0.2;
+			ui_heroText.scaleX = 0.8 + Math.random();
+			ui_heroText.scaleY = 0.8 + Math.random();
+			ui_heroText.rotation = -10 + Math.random() * 20;
+
+			//Animation Tween
+			animNamePop = createjs.Tween.get(ui_heroText).to(
+			{
+				alpha: 1,
+				scaleX: 1,
+				scaleY: 1,
+				rotation: 0
+			}, rollingSpd, createjs.Ease.cubicOut);
+		}
+
+		function randomName(ary){
+			var randomNameIndex = randomInt(ary.length - 1, lastRandomNameIndex);
+			lastRandomNameIndex = randomNameIndex;
+			var name = ary[randomNameIndex];
+			if(name == lastWinnerName){
+				name = randomName(nameAry);
+			}
+
+			return name;
+		}
+
+		function getWinner(winMode){
+			var winner = '';
+			if(winMode){
+				winner = randomName(nameAry_winner);
+				winnerAry.push(winner);
+				storeAry(winnerAry);
+				nameAry_winner = nameAry_winner.filter(n => n != winner);
+			}else{
+				winner = randomName(nameAry);
+			}
+
+			lastWinnerName = winner;
+			return winner
+		}
+
+
+		//==================================================
+		//= Utility Methods
+		//==================================================
+
+		//A substract B
+		function substractAry(a,b){
+			if(b.length == 0){
+				return a;
+			}else{
+				var tempAry = a.slice(0)
+				for(i in tempAry){
+					for(k in b){
+						if(tempAry[i] == b[k]){
+							tempAry.splice(i,1);
+						}
+					}
+				}
+				return tempAry;
+			}
+		}
+
+		//generate a random number different from last one
+		function randomInt(max, lastInt){
+			lastInt = lastInt || null;
+			var newInt = Math.round( Math.random() * max );
+			if (newInt == lastInt){
+				newInt = randomInt(max, lastInt)
+			}
+
+			return newInt;
+		}
+
+		function centerObj(a,b){
+			aB = a.getBounds();
+			bB = b.getBounds();
+			a.x = bB.width/2 - aB.width/2;
+			a.y = bB.height/2 - aB.height/2;
+		}
+
+		function tick(){
+			ui_stage.update();
+		}
+
+		function resize(){
+			//Resized number
+			ui_stage.canvas.width = window.innerWidth;
+			ui_stage.canvas.height = window.innerHeight;
+			var stageScaleX = ui_stage.canvas.width/1920;
+			var stageScaleY = ui_stage.canvas.height/1080;
+
+			//Resize backgroud
+			ui_bg.x = ui_stage.canvas.width / 2;
+			if(ui_stage.canvas.width >= ui_stage.canvas.height*16/9){
+				ui_bg.scaleX = stageScaleX;
+				ui_bg.scaleY = stageScaleX;
+				maskScale = stageScaleX*2;
+			}else{
+				ui_bg.scaleX = stageScaleY;
+				ui_bg.scaleY = stageScaleY;
+				maskScale = stageScaleY*2;
+			}
+			if(winnerMode){
+				ui_bgMask.scaleX = maskScale;
+				ui_bgMask.scaleY = maskScale;
+			}
+
+			//Resize Intro
+			ui_intro.x = ui_stage.canvas.width / 2;
+			ui_intro.y = ui_stage.canvas.height / 2;
+
+			//txt1 & txt2
+			if(stageTag == 'rolling' || stageTag == 'rolling-result'){
+				//txt1,2 are out
+				txt1_stagePos = {x: 0, y: ui_stage.canvas.height*-1, scaleX: stageScaleX, scaleY: stageScaleX};
+				txt2_stagePos = {x: 0, y: ui_stage.canvas.height, scaleX: stageScaleX, scaleY: stageScaleX};
+			}else{
+				//txt1,2 are in
+				txt1_stagePos = {x: 0, y: -100 * stageScaleY, scaleX: stageScaleX, scaleY: stageScaleX};
+				txt2_stagePos = {x: 0, y: txt1_stagePos.y + (400 * stageScaleY), scaleX: stageScaleX, scaleY: stageScaleX};
+			}
+
+			createjs.Tween.removeTweens(ui_txt1);
+			createjs.Tween.removeTweens(ui_txt2);
+
+			txt1_enter = createjs.Tween.get(ui_txt1).to(
+			{
+				alpha: 1,
+				scaleX: txt1_stagePos.scaleX,
+				scaleY: txt1_stagePos.scaleY,
+				x: txt1_stagePos.x,
+				y: txt1_stagePos.y,
+				rotation: 0
+			}, 1000, createjs.Ease.cubicInOut);
+
+			txt2_enter = createjs.Tween.get(ui_txt2).wait(200).to(
+			{
+				alpha: 1,
+				scaleX: txt2_stagePos.scaleX,
+				scaleY: txt2_stagePos.scaleY,
+				x: txt2_stagePos.x,
+				y: txt2_stagePos.y,
+				rotation: 0
+			}, 1000, createjs.Ease.cubicInOut);
+
+			txt2_enter.addEventListener('complete',idleIntro);
+
+			//Resize Switch
+			ui_winnerSwitch.y = ui_stage.canvas.height/2 - 50;
+
+			//Resize Logo
+			ui_logo.x = ui_stage.canvas.width/-2+20;
+			ui_logo.y = ui_stage.canvas.height/-2+20;
+
+			//Resize content
+			ui_content.x = ui_stage.canvas.width / 2;
+	  		ui_content.y = ui_stage.canvas.height / 2;
+
+			console.log('Resized to: '+ui_stage.canvas.width+' x '+ui_stage.canvas.height)
+		}
+	</script>
+</head>
+<body onload="init();">
+		<canvas id="mainCanvas"width="400" height="300"></canvas>
+</body>
+</html>
